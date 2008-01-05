@@ -1,0 +1,37 @@
+=========================
+FUSE-Python_ bindings FAQ
+=========================
+
+.. _FUSE-Python: http://fuse.sourceforge.net/wiki/index.php/FusePython
+
+:Author: Csaba Henk
+
+
+Frequently Asked Questions
+==========================
+
+Compilation of ``fuseparts/_fusemodule.c`` fails with *error: too few arguments to function*
+--------------------------------------------------------------------------------------------
+
+Most likely you have FUSE 2.6.0-pre2. Most likely you are on Gentoo.
+
+While fuse-py tries to work with as many API revisions as it's possible, the
+2.6.0-pre2 release uses a half-baked state of API 26, which won't work with
+fuse-py. The same issue can occur if you use a CVS snapshot.
+
+Solutions:
+
+* Enforce the usage of a stabilized API (practically, API 25) with::
+
+    env CFLAGS=-DFUSE_USE_VERSION=25 python setup.py build 
+
+* Upgrade your FUSE installation. As of writing this, 2.6.0-pre3 is available.
+
+When I use a dedicated file class, how can I tell apart the cases when an instance of it is instantiated from a ``CREATE`` callback and when it's instantiated from an ``OPEN`` callback? 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+If your file class is instantiated via ``FUSE_OPEN``, then it's
+``__init__`` will be called with ``(path, flags)`` arguments.
+
+If your file class is instantiated via ``FUSE_CREATE``, then it's
+``__init__`` will be called with ``(path, flags, mode)`` arguments.
