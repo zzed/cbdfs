@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os, sys, errno, stat, copy, cPickle, traceback
+import os, sys, errno, stat, copy, cPickle, traceback, time
 from chunkstore import ChunkStore
 from array import array
 
@@ -25,9 +25,9 @@ class CBFSStat(fuse.Stat):
         self.st_uid = 0
         self.st_gid = 0
         self.st_size = 0
-        self.st_atime = 0
-        self.st_mtime = 0
-        self.st_ctime = 0
+        self.st_atime = time.time()
+        self.st_mtime = time.time()
+        self.st_ctime = time.time()
 
 
 class CBFSDirentry(fuse.Direntry):
@@ -389,13 +389,15 @@ class CBFS(Fuse):
 		try:
 			dir1 = self.dirtree.getnode(dirname1)
 			dir2 = self.dirtree.getnode(dirname2)
+			entry1 = dir1.entries[name1]
 		except:
 			return -errno.ENOENT
 
 		if name2 in dir2.entries:
 			return -errno.EEXIST
 
-		dir2.entries[name2] = dir1.entries[name1]
+		dir2.entries[name2] = entry1
+		entry1.name = name2;
 		del(dir1.entries[name1])
 
 

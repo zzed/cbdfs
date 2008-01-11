@@ -1,0 +1,9 @@
+- chunks are stored by sha-512 ids
+- important to remember: chunks are *never* rewritten, as their hash changes then
+
+storage of files inside chunks (not yet realized in implementation):
+ - it is assumed that all chunks but the first and the last (which are usually "shared chunks") are fully used by current file
+ - first and last chunk has index and length of part that is used by file
+ - if data is changed, *always* new chunks are created
+ - when file is closed, last chunk is analyzed if it can be shared by several files (see CBFSDirtree.unfilledchunks)
+ - only unshared chunks may be written to (when file is closed, last chunk will be shared with other files nevertheless) <-- change!
