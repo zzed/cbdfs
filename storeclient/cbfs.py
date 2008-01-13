@@ -53,6 +53,13 @@ class CBFSDirectory(CBFSDirentry):
 		
 class CBFSFile(CBFSDirentry):
 
+	# offset and length of data in first chunk
+	fcoffset = 0
+	fclength = 0
+	# offset and length of data in last chunk
+	lcoffset = 0
+	lclength = 0
+
 	hashes = None
 
 	def __init__(self, name, parentdir):
@@ -214,15 +221,27 @@ class CBFSFilehandle(object):
 
 	def read(self, length, offset):
 		print "CBFSFilehandle.read(%s, %s)" % (length, offset)
-		chunkidx = int(offset/chunkstore.chunksize)
-		chunkamount = int(length/chunkstore.chunksize)+1
-		byteidx = offset-chunkidx*chunkstore.chunksize
+		chunkidx = int((offset-self.node.fclength+chunkstore.chunksize)/chunkstore.chunksize)
+		if chunkidx==0:
+			chunkamount = int((length-fclength)/chunkstore.chunksize)+2
+			byteidx = 0
+		else:
+			chunkamount = int(length/chunkstore.chunksize)+1
+			byteidx = offset-self.node.fclength-(chunkidx-1)*chunkstore.chunksize
 		bytesleft = min(length, self.node.st.st_size-offset)
 		data = ""
 
 		for chunkid in range(chunkidx, chunkidx+chunkamount):
+			bytestoread = bytesleft
+			if chunkid==0:
+				byteidx += fcoffset
+				bytestoread = min(bytestoread, self.node.fclength)
+			elif chunkid==len(self.node.hashes)-1:
+				byteidx += self.node.lcoffset
+				# bytestoread need not be changed, as it is ensured that it
+				# will not be read over file size boundaries
 			self.__loadchunk(chunkid)
-			data += self.actchunk[byteidx:byteidx+bytesleft].tostring()
+			data += self.actchunk[byteidx:byteidx+bytestoread].tostring()
 			bytesleft = length-len(data)
 			byteidx = 0
 
@@ -234,13 +253,32 @@ class CBFSFilehandle(object):
 		bidx = 0
 
 		while bidx<len(buf):
-			cidx = int((offset+bidx)/chunkstore.chunksize)
+			cidx = int((offset+bidx-self.node.fclength+chunkstore.chunksize)/chunkstore.chunksize)
+			if bidx+offset<chunkstore.chunksize and len(self.node.hashes)==1:
+				# we want to extend the first chunk
+				cidx = 0
 			self.__loadchunk(cidx)
-			coff = bidx+offset-cidx*chunkstore.chunksize
-			count = len(buf)-bidx
-			if (count > chunkstore.chunksize-coff):
-				# wrap length to chunk limits
-				count = chunkstore.chunksize-coff
+			if cidx==0:
+				# first chunk may be extended
+				coff = bidx+fcoffset
+				if len(self.node.hashes)==1:
+					count = min(len(buf)-bidx, chunkstore.chunksize-coff)
+					self.node.fclength = count+offset
+				else:
+					# if more than one chunk is already written, data length in first chunk
+					# must not be changed
+					count = min(len(buf-bidx, fclength))
+			else:
+				# move data to the front when last chunk is modified
+				if cidx==len(self.node.hashes)-1 and self.node.lcoffset>0:
+					self.actchunk[0:self.node.lclength] = self.actchunk[lcoffset:lcoffset+self.node.lclength];
+					self.node.lcoffset = 0
+				coff = bidx+offset-self.node.fclength-(cidx-1)*chunkstore.chunksize
+				count = len(buf)-bidx
+				if (count > chunkstore.chunksize-coff):
+					# wrap length to chunk limits
+					count = chunkstore.chunksize-coff
+
 			# write data to chunk
 			self.actchunk[coff:coff+count] = array('c', buf[bidx:bidx+count])
 			self.actcmodified = True
@@ -248,6 +286,7 @@ class CBFSFilehandle(object):
 		
 		if (len(buf)+offset>self.node.st.st_size):
 			self.node.st.st_size = len(buf)+offset
+			self.node.lclength = (self.node.st.st_size-self.node.fclength)%chunkstore.chunksize
 
 		return len(buf)
 	
