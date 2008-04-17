@@ -47,7 +47,7 @@ assert(fs.rmdir("/testdir1")==None)
 assert(compdirs(fs.readdir("/", 0), [ ".", ".." ]))
 
 # file reading and writing
-f = cbfs.CBFSFilehandle("/testfile", os.O_CREAT|os.O_WRONLY, 0)
+f = cbfs.CBFSFilehandle("/testfile", os.O_CREAT|os.O_WRONLY, stat.S_IFREG)
 f.write("test123", 0)
 f.release(0)
 assert(compdirs(fs.readdir("/", 0), [ ".", "..", "testfile" ]))
@@ -62,3 +62,4 @@ assert(f.read(20, 3) == "t123")
 assert(fs.unlink("/testfile")==None)
 assert(compdirs(fs.readdir("/", 0), [ ".", ".." ]))
 
+print "\nTests successfully completed! (yai!!)"

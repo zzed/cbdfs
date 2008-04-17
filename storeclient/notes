@@ -1,3 +1,13 @@
+How to mount and run CBFS:
+===========================
+- get current snapshot of fuse python bindings: 
+  cvs -z3 -d:pserver:anonymous@fuse.cvs.sourceforge.net:/cvsroot/fuse co -P python
+- call python setup.py to compile fuse-python
+- copy stuff in build/lib.linux-i686-2.5 to cbfs storeclient directory
+- mount in debug mode: python cbfs.py /mnt/mnt -d -f -s
+
+Implementation Info:
+======================
 - chunks are stored by sha-512 ids
 - important to remember: chunks are *never* rewritten, as their hash changes then
 

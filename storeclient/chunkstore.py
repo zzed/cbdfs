@@ -2,6 +2,7 @@ from __future__ import with_statement
 
 import hashlib
 import os
+import copy
 from array import array
 
 
@@ -10,7 +11,7 @@ class ChunkStore:
 
 	chunksize = 2**23
 	rootdir = "."
-	hash = hashlib.sha512()
+	hashalgo = hashlib.sha512()
 	
 	def __init__(self, directory = ".", chunksize = 2**23):
 		self.chunksize = chunksize
@@ -25,8 +26,9 @@ class ChunkStore:
 	def put(self, chunk):
 		assert(len(chunk)<=self.chunksize, "given chunk is larger than chunksize (%u)" % self.chunksize)
 
-		self.hash.update(chunk)
-		d = self.hash.hexdigest()
+		hash = self.hashalgo.copy()
+		hash.update(chunk)
+		d = hash.hexdigest()
 		(fpath, fname) = self.__calcfilename(d)
 		compname = "%s/%s/%s" % (self.rootdir, fpath, fname)
 		if os.access(compname, os.F_OK|os.R_OK|os.W_OK):
@@ -46,8 +48,9 @@ class ChunkStore:
 		with open(compname, "r") as f:
 			chunk = array('c')
 			chunk.fromfile(f, min(s, self.chunksize))
-		self.hash.update(chunk)
-		d = self.hash.hexdigest()
+		hash = self.hashalgo.copy()
+		hash.update(chunk)
+		d = hash.hexdigest()
 		assert(d==hashstring, "file %s does not have correct checksum %s" % (compname, hashstring))
 
 		return chunk
