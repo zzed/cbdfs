@@ -1,0 +1,42 @@
+Related work (interesting site: http://changelog.complete.org/posts/684-A-Cloud-Filesystem.html):
+ - Gluster (www.gluster.org):
+   - optimized for performance in clusters (supports InfiniBand/Tcp/IP)
+   - so used for local networks, not usable in internet?
+   - central server which manages filesystem
+   - also high data volumes in mind
+   -> too localized, too specialized for clusters
+
+ - OceanStore (http://oceanstore.cs.berkeley.edu/):
+   - for widely distributed storage of files in the internet
+   - byzantine-like features to detect malicious clients
+   - several 'access servers' which allow access to own data
+   - servers also cache data for faster access
+   -> specialized for widely distributed usage, not for easy/fast access
+
+ - Tahoe (http://allmydata.org/trac/tahoe):
+   - fully meshed net of nodes that store data
+   - files may be set as immutable
+   - each file is split into several chunks for erasure-coded storage by client
+   - high redundancy
+   -> very slow file upload, faster download possible. not usable for realtime file systems, too distributed for this task
+
+ - MogileFS (http://www.danga.com/mogilefs/)
+   - application level, not posix compliant, no kernel modules (or FUSE)
+   - flat hierarchy, no directories supported (but namespaces)
+   - automatic file replication!
+   -> unfortunately not useful for filesystems ... but automatic file replication would be really useful!
+
+ - GoogleFS:
+   - modification of data not well supported
+
+ - Hadoop:
+   - is an API for distributed computing!
+
+ - Wuala:
+   - online Webapplication, or local application
+   - suited for public/private/shared data between friends
+   - highly distributed
+   - special API, no filesystem support
+   - limited storage, as centrally controlled, also bandwidth for individual users limited
+   - no modification of files possible
+
