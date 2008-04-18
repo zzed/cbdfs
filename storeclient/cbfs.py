@@ -2,7 +2,7 @@
 
 from __future__ import with_statement
 import os, sys, errno, copy, traceback
-from ChunkStore import ChunkStore
+from ChunkStoreManager import ChunkStoreManager
 
 sys.path.append("fuse-build")
 import fuse
@@ -96,62 +96,68 @@ class CBFSFilehandle(object):
 
 	def read(self, length, offset):
 		print "CBFSFilehandle.read(%s, %s)" % (length, offset)
-		dirtree.lock.acquire()
-		chunkidx = int(offset/chunkstore.chunksize)
-		chunkamount = int(length/chunkstore.chunksize)+1
-		byteidx = offset-chunkidx*chunkstore.chunksize
-		bytesleft = min(length, self.node.st.st_size-offset)
-		data = ""
+		try:
+			dirtree.lock.acquire()
+			chunkidx = int(offset/chunkstore.chunksize)
+			chunkamount = int(length/chunkstore.chunksize)+1
+			byteidx = offset-chunkidx*chunkstore.chunksize
+			bytesleft = min(length, self.node.st.st_size-offset)
+			data = ""
 
-		for chunkid in range(chunkidx, chunkidx+chunkamount):
-			self.__loadchunk(chunkid)
-			data += self.actchunk[byteidx:byteidx+bytesleft].tostring()
-			bytesleft = length-len(data)
-			byteidx = 0
-
-		dirtree.lock.release()
+			for chunkid in range(chunkidx, chunkidx+chunkamount):
+				self.__loadchunk(chunkid)
+				data += self.actchunk[byteidx:byteidx+bytesleft].tostring()
+				bytesleft = length-len(data)
+				byteidx = 0
+		finally:
+			dirtree.lock.release()
 		return data
 	
 
 	def write(self, buf, offset):
 		print "CBFSFilehandle.write(data len: %s, %s)" % (len(buf), offset)
-		dirtree.lock.acquire()
-		bidx = 0
+		try:
+			dirtree.lock.acquire()
+			bidx = 0
 
-		while bidx<len(buf):
-			cidx = int((offset+bidx)/chunkstore.chunksize)
-			self.__loadchunk(cidx)
-			coff = bidx+offset-cidx*chunkstore.chunksize
-			count = len(buf)-bidx
-			if (count > chunkstore.chunksize-coff):
-				# wrap length to chunk limits
-				count = chunkstore.chunksize-coff
+			while bidx<len(buf):
+				cidx = int((offset+bidx)/chunkstore.chunksize)
+				self.__loadchunk(cidx)
+				coff = bidx+offset-cidx*chunkstore.chunksize
+				count = len(buf)-bidx
+				if (count > chunkstore.chunksize-coff):
+					# wrap length to chunk limits
+					count = chunkstore.chunksize-coff
 
-			# write data to chunk
-			if coff+count>len(self.actchunk): self.actchunk.extend('\0' * (coff+count-len(self.actchunk)))
-			self.actchunk[coff:coff+count] = array('c', buf[bidx:bidx+count])
-			self.actcmodified = True
-			bidx += count
-		
-		if (len(buf)+offset>self.node.st.st_size):
-			self.node.st.st_size = len(buf)+offset
-
-		dirtree.lock.release()
+				# write data to chunk
+				if coff+count>len(self.actchunk): self.actchunk.extend('\0' * (coff+count-len(self.actchunk)))
+				self.actchunk[coff:coff+count] = array('c', buf[bidx:bidx+count])
+				self.actcmodified = True
+				bidx += count
+			
+			if (len(buf)+offset>self.node.st.st_size):
+				self.node.st.st_size = len(buf)+offset
+		finally:
+			dirtree.lock.release()
 		return len(buf)
 	
 
 	def release(self, flags):
 		print "CBFSFilehandle.release()"
-		dirtree.lock.acquire()
-		self.__writechunk()
-		dirtree.lock.release()
+		try:
+			dirtree.lock.acquire()
+			self.__writechunk()
+		finally:
+			dirtree.lock.release()
 	
 
 	def flush(self):
 		print "CBFSFilehandle.flush()"
-		dirtree.lock.acquire()
-		self.__writechunk()
-		dirtree.lock.release()
+		try:
+			dirtree.lock.acquire()
+			self.__writechunk()
+		finally:
+			dirtree.lock.release()
 
 
 	def getattr(self):
@@ -166,15 +172,17 @@ class CBFSFilehandle(object):
 
 	def truncate(self, len):
 		print "CBFSFilehandle.truncate(%s)" % len
-		dirtree.lock.acquire()
-		self.__writechunk()
-		cno = int(len/chunkstore.chunksize)+1
-		if (len<self.node.st.st_size):
-			del(self.node.hashes[cno:])
-		elif (len>self.node.st.st_size):
-			self.__loadchunk(cno)
-		self.node.st.st_size = len
-		dirtree.lock.release()
+		try:
+			dirtree.lock.acquire()
+			self.__writechunk()
+			cno = int(len/chunkstore.chunksize)+1
+			if (len<self.node.st.st_size):
+				del(self.node.hashes[cno:])
+			elif (len>self.node.st.st_size):
+				self.__loadchunk(cno)
+			self.node.st.st_size = len
+		finally:
+			dirtree.lock.release()
 
 	# def fsync(self, isfsyncfile):	
 	# def lock(self, cmd, owner, **kw):
@@ -398,7 +406,7 @@ class CBFS(Fuse):
 	def fsinit(self):
 		print "fsinit()"
 		global chunkstore
-		chunkstore = self.chunkstore = ChunkStore(self, self.workdir, 2**19)
+		chunkstore = self.chunkstore = ChunkStoreManager(self.dirtree, self.workdir, 2**19)
 		self.dirtree.chunkstore = chunkstore
 		try:
 			hash = chunkstore.loadinithash()

@@ -2,7 +2,6 @@
 
 import cbfs, os, stat
 
-from ChunkStore import ChunkStore
 
 
 def compdirs(direntries, names):

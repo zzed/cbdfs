@@ -7,7 +7,7 @@ import threading
 import cPickle
 import UsedHashProvider
 from array import array
-from ChunkStore import ChunkStore
+from ChunkStoreManager import ChunkStoreManager
 
 
 class CBFSStat(fuse.Stat):
@@ -56,7 +56,14 @@ class CBFSDirectory(CBFSDirentry):
 		if name == "": self.parent = self
 		self.st.st_mode = stat.S_IFDIR | 0755
 		self.entries = {}
+
+	def get_used_hashes(self):
+		m = {}
+		for i in self.entries.values():
+			m.update(i.get_used_hashes())
+		return m
 		
+
 class CBFSFile(CBFSDirentry):
 
 	## offset and length of data in first chunk
@@ -73,6 +80,12 @@ class CBFSFile(CBFSDirentry):
 		self.st.st_mode = stat.S_IFREG | 0444
 		self.hashes = []
 
+	def get_used_hashes(self):
+		m = {}
+		for i in self.hashes:
+			m[i] = 1
+		return m
+
 
 class CBFSSymlink(CBFSDirentry):
 
@@ -83,19 +96,24 @@ class CBFSSymlink(CBFSDirentry):
 		self.dest = dest
 		self.st.st_mode = stat.S_IFLNK | 0777
 
+	def get_used_hashes(self):
+		return {}
+
 
 class CBFSDirtree(UsedHashProvider.UsedHashProvider):
 
 	root = None
 	# reserved space for hashes in functions load/save in bytes
-	hashsize = ChunkStore.hashsize
+	hashsize = ChunkStoreManager.hashsize
 	# lock that *MUST* be acquired before directory tree is changed
 	lock = None
 	chunkstore = None	# *MUST* be set by external class
+	indexhashes = None	# all hashes that are used by the filesystem index
 
 	def __init__(self):
 		self.root = CBFSDirectory("", None)
 		self.lock = threading.RLock()
+		self.indexhashes = []
 
 	
 	def getnode(self, name):
@@ -122,9 +140,6 @@ class CBFSDirtree(UsedHashProvider.UsedHashProvider):
 	def save(self):
 		print "CBFSDirtree.save()"
 		rootdump = cPickle.dumps(self.root)
-		f = open("rootsave", "w")
-		cPickle.dump(self.root, f)
-		f.close()
 		print "dirtree size: %d" % len(rootdump)
 		bsize = self.chunkstore.chunksize-self.hashsize
 		btodo = len(rootdump)
@@ -144,24 +159,29 @@ class CBFSDirtree(UsedHashProvider.UsedHashProvider):
 	
 	def load(self, hash):
 		print "CBFSDirtree.load(%s)" % hash
+		self.indexhashes = []
 		nexthash = hash
 		rootdump = "" 
 		zerohash = '\0'*self.hashsize
 		while nexthash!=zerohash:
 			print "loading hash %s" % nexthash
+			self.indexhashes.append(nexthash)
 			chunk = self.chunkstore.get(nexthash)
 			nexthash = chunk[:self.hashsize].tostring()
 			rootdump += chunk[self.hashsize:].tostring()
 		print "dirtree size: %d" % len(rootdump)
 
-		with open("rootload", "w") as f:
-			f.write(rootdump)
-		
 		self.root = cPickle.loads(rootdump)
+	
 
-	def getusedhashes(self):
+	def get_used_hashes(self):
 		"returns a list of hashes which are currently used in filesystem"
-		print "CBFSDirtree.getusedhashes"
-		self.lock.acquire()
-		
-		self.lock.release()
+		print "CBFSDirtree.get_used_hashes()"
+		try:
+			self.lock.acquire()
+			h = self.root.get_used_hashes()
+			for i in self.indexhashes:
+				h[i] = 1
+		finally:
+			self.lock.release()
+		return h

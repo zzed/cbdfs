@@ -1,40 +1,35 @@
 from __future__ import with_statement
 
-import hashlib
 import os
-import copy
-import thread
-import time
-from array import array
+import fnmatch
+from array import array 
 
 
-class ChunkStoreManager:
-	"stores chunks of varying size according to SHA1 hashes"
+class ChunkStoreServer:
+	"implements a local chunk store that is accessed by ChunkStoreManager"
 
 	chunksize = 2**23
 	rootdir = "."
-	hashalgo = hashlib.sha512()
-	hashsize = 128
-	usedhashprovider = None # usually points to CBFSDirtree
-	shutdown = None
-	thread_stopped = None
-	
-	def __init__(self, usedhashprovider, directory = ".", chunksize = 2**23):
-		print "ChunkStore.__init__(%s, %d)" % (directory, chunksize)
-		self.usedhashprovider = usedhashprovider
+	hashalgo = None
+	hashsize = None
+
+	def __init__(self, directory, chunksize, hashalgo, hashsize):
+		print "ChunkStoreServer.__init__(%s, %d)" % (directory, chunksize)
 		self.chunksize = chunksize
 		self.rootdir = directory
+		self.hashalgo = hashalgo
+		self.hashsize = hashsize
 		self.thread_stopped = False
 		if not os.path.exists(directory): 
 			os.makedirs(directory)
-		self.shutdown = False
-		thread.start_new_thread(ChunkStore.background_thread, (self, ))
+		#self.shutdown = False
+		#thread.start_new_thread(ChunkStore.background_thread, (self, ))
 
 	def stop(self):
-		print "ChunkStore.stop()"
-		self.shutdown = True
-		while not self.thread_stopped:
-			time.sleep(1)
+		print "ChunkStoreServer.stop()"
+		#self.shutdown = True
+		#while not self.thread_stopped:
+			#time.sleep(1)
 
 	# calculates the path and filename of chunk file
 	def __calcfilename(self, hexdigest):
@@ -58,7 +53,6 @@ class ChunkStoreManager:
 			return d
 		with open(compname, "w") as f:
 			chunk.tofile(f)
-			#f.write(chunk)
 		return d
 
 
@@ -96,36 +90,32 @@ class ChunkStoreManager:
 
 	def remove(self, hashstring):
 		(fpath, fname) = self.__calcfilename(hashstring)
-		compname = "%s/%s/%s" % (self.directory, fpath, fname)
+		compname = "%s/%s/%s" % (self.rootdir, fpath, fname)
 		os.remove(compname)
 		# TODO: remove paths which are unneeded
 
-	def check(self):
-		# TODO: check all stored chunks if hashes are correct
-		pass
+	
+	def get_stored_hashes(self):
+		files = []
+		for file in os.listdir(self.rootdir):
+			if fnmatch.fnmatch(file, '*.dat'):
+				files.append(file[:-4])
+		return files
 
-
-	def do_chunk_gc(self):
-		"performs chunk garbage collection and checks whether unused chunks are in use"
-		print "ChunkStore.do_chunk_gc()"
-		# collect all hashes stored here
-
-	def background_thread(self):
-		try:
-			initial_sleep = 5
-			loop_sleep = 120
-			print "Chunkstore.background_thread started, waiting %d seconds before operation starts ..." % initial_sleep
-			time.sleep(initial_sleep)
-			while not self.shutdown:
-				do_chunk_gc()
-				for i in range(1, loop_sleep):
-					time.sleep(1)
-					if self.shutdown: break 
-			print "Chunkstore.background_thread shutting down"
-		except:
-			print "error in ChunkStore.background_thread"
-			raise
-		finally:
-			self.thread_stopped = True
-			
-
+	#def background_thread(self):
+		#try:
+			#initial_sleep = 5
+			#loop_sleep = 120
+			#print "Chunkstore.background_thread started, waiting %d seconds before operation starts ..." % initial_sleep
+			#time.sleep(initial_sleep)
+			#while not self.shutdown:
+				#do_chunk_gc()
+				#for i in range(1, loop_sleep):
+					#time.sleep(1)
+					#if self.shutdown: break 
+			#print "Chunkstore.background_thread shutting down"
+		#except:
+			#print "error in ChunkStore.background_thread"
+			#raise
+		#finally:
+			#self.thread_stopped = True
