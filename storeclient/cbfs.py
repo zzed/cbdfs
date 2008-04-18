@@ -1,13 +1,17 @@
 #!/usr/bin/env python
 
-import os, sys, errno, stat, copy, cPickle, traceback, time
-from chunkstore import ChunkStore
-from array import array
+from __future__ import with_statement
+import os, sys, errno, copy, traceback
+from ChunkStore import ChunkStore
 
 sys.path.append("fuse-build")
 import fuse
 import traceback
+import stat
+from array import array
 from fuse import Fuse
+
+from CBFilesystem import CBFSStat, CBFSDirectory, CBFSFile, CBFSSymlink, CBFSDirtree
 
 
 if not hasattr(fuse, '__version__'):
@@ -17,143 +21,7 @@ if not hasattr(fuse, '__version__'):
 fuse.fuse_python_api = (0, 2)
 
 
-class CBFSStat(fuse.Stat):
-	def __init__(self):
-		self.st_mode = 0
-		self.st_ino = 0
-		self.st_dev = 0
-		self.st_nlink = 1
-		self.st_uid = 0
-		self.st_gid = 0
-		self.st_size = 0
-		self.st_atime = time.time()
-		self.st_mtime = time.time()
-		self.st_ctime = time.time()
-
-	def printme(self):
-		print "mode: %o" % self.st_mode
-		print "ino: %u" % self.st_ino
-		print "dev: %u" % self.st_dev
-		print "nlink: %u" % self.st_nlink
-		print "uid: %u" % self.st_uid
-		print "gid: %u" % self.st_gid
-		print "size: %u" % self.st_size
-		print "atime: %u" % self.st_atime
-		print "mtime: %u" % self.st_mtime
-		print "ctime: %u" % self.st_ctime
-
-
-class CBFSDirentry(fuse.Direntry):
-
-	parent = None
-	st = None
-	
-	def __init__(self, name, parentdir):
-		fuse.Direntry.__init__(self, name)
-		self.parent = parentdir
-		self.st = CBFSStat()
-		
-
-class CBFSDirectory(CBFSDirentry):
-
-	entries = None
-	
-	def __init__(self, name, parentdir):
-		CBFSDirentry.__init__(self, name, parentdir)
-		if name == "": self.parent = self
-		self.st.st_mode = stat.S_IFDIR | 0755
-		self.entries = {}
-		
-class CBFSFile(CBFSDirentry):
-
-	## offset and length of data in first chunk
-	#fcoffset = 0
-	#fclength = 0
-	## offset and length of data in last chunk
-	#lcoffset = 0
-	#lclength = 0
-
-	hashes = None
-
-	def __init__(self, name, parentdir):
-		CBFSDirentry.__init__(self, name, parentdir)
-		self.st.st_mode = stat.S_IFREG | 0444
-		self.hashes = []
-
-
-class CBFSSymlink(CBFSDirentry):
-
-	dest = None
-
-	def __init__(self, name, parentdir, dest):
-		CBFSDirentry.__init__(self, name, parentdir)
-		self.dest = dest
-
-
-
-class CBFSDirtree:
-
-	root = None
-	# reserved space for hashes in functions load/save in bytes
-	hashsize = 200   
-
-	def __init__(self):
-		self.root = CBFSDirectory("", None)
-
-	
-	def getnode(self, name):
-		dirnames = name.split("/")
-		curdir = self.root
-
-		if name == "" or name == "/":
-			print "CBFSDirtree.getnode: returning root"
-			return curdir
-
-		for dir in dirnames:
-			if dir == "" or dir == ".": 
-				continue
-			elif dir == "..": 
-				curdir = curdir.parent
-			elif curdir.entries.has_key(dir):
-				curdir = curdir.entries[dir]
-			else:
-				raise IndexError, "path '%s' not found at item '%s'" % (name, dir) 
-
-		return curdir
-	
-
-	def save(self):
-		print "CBFSDirtree.save()"
-		rootdump = cPickle.dumps(self.root)
-		print "dirtree size: %d" % len(rootdump)
-		bleft = len(rootdump)
-		bsize = chunkstore.chunksize-self.hashsize
-		nexthash = '\0'*self.hashsize
-		while bleft>0:
-			bstart = max(bleft-bsize, 0)
-			chunk = array('c', '\0' * self.hashsize)
-			bend = min(bstart+bsize, len(rootdump))
-			chunk.extend(array('c', rootdump[bstart:bstart+bsize]))
-			chunk[:self.hashsize] = array('c', nexthash)
-			nexthash = chunkstore.put(chunk)
-			bleft -= bsize
-		return nexthash
 			
-	
-	def load(self, hash):
-		print "CBFSDirtree.load(%s)" % hash
-		nexthash = hash
-		rootdump = "" 
-		zerohash = '\0'*self.hashsize
-		while nexthash!=zerohash:
-			chunk = chunkstore.get(hash)
-			nexthash = chunk[:self.hashsize].tostring()
-			rootdump += chunk[self.hashsize:].tostring()
-		print "dirtree size: %d" % len(rootdump)
-		self.root = cPickle.loads(rootdump)
-			
-
-
 
 class CBFSFilehandle(object):
 
@@ -166,7 +34,6 @@ class CBFSFilehandle(object):
 	# file-wise FUSE attributes
 	direct_io = False  
 	keep_cache = False
-
 
 	def __init__(self, path, flags, *mode):
 		print "CBFSFilehandle.__init__(%s, %s, %s)" % (path, flags, mode)
@@ -215,7 +82,7 @@ class CBFSFilehandle(object):
 		if chunkindex>=len(self.node.hashes):
 			# fill up all non-existing space in file with empty chunks ...
 			# create more than one chunk at once
-			chunk = copy.copy(nullchunk)
+			chunk = array('c')
 			hash = chunkstore.put(chunk)
 			for i in range(0, chunkindex-len(self.node.hashes)+1):
 				self.node.hashes.append(hash)
@@ -229,6 +96,7 @@ class CBFSFilehandle(object):
 
 	def read(self, length, offset):
 		print "CBFSFilehandle.read(%s, %s)" % (length, offset)
+		dirtree.lock.acquire()
 		chunkidx = int(offset/chunkstore.chunksize)
 		chunkamount = int(length/chunkstore.chunksize)+1
 		byteidx = offset-chunkidx*chunkstore.chunksize
@@ -241,11 +109,13 @@ class CBFSFilehandle(object):
 			bytesleft = length-len(data)
 			byteidx = 0
 
+		dirtree.lock.release()
 		return data
 	
 
 	def write(self, buf, offset):
 		print "CBFSFilehandle.write(data len: %s, %s)" % (len(buf), offset)
+		dirtree.lock.acquire()
 		bidx = 0
 
 		while bidx<len(buf):
@@ -258,7 +128,7 @@ class CBFSFilehandle(object):
 				count = chunkstore.chunksize-coff
 
 			# write data to chunk
-			if coff+count>len(self.actchunk): self.actchunk.extend('\0' * coff+count-len(self.actchunk))
+			if coff+count>len(self.actchunk): self.actchunk.extend('\0' * (coff+count-len(self.actchunk)))
 			self.actchunk[coff:coff+count] = array('c', buf[bidx:bidx+count])
 			self.actcmodified = True
 			bidx += count
@@ -266,17 +136,22 @@ class CBFSFilehandle(object):
 		if (len(buf)+offset>self.node.st.st_size):
 			self.node.st.st_size = len(buf)+offset
 
+		dirtree.lock.release()
 		return len(buf)
 	
 
 	def release(self, flags):
 		print "CBFSFilehandle.release()"
+		dirtree.lock.acquire()
 		self.__writechunk()
+		dirtree.lock.release()
 	
 
 	def flush(self):
 		print "CBFSFilehandle.flush()"
+		dirtree.lock.acquire()
 		self.__writechunk()
+		dirtree.lock.release()
 
 
 	def getattr(self):
@@ -291,6 +166,7 @@ class CBFSFilehandle(object):
 
 	def truncate(self, len):
 		print "CBFSFilehandle.truncate(%s)" % len
+		dirtree.lock.acquire()
 		self.__writechunk()
 		cno = int(len/chunkstore.chunksize)+1
 		if (len<self.node.st.st_size):
@@ -298,11 +174,10 @@ class CBFSFilehandle(object):
 		elif (len>self.node.st.st_size):
 			self.__loadchunk(cno)
 		self.node.st.st_size = len
-
+		dirtree.lock.release()
 
 	# def fsync(self, isfsyncfile):	
 	# def lock(self, cmd, owner, **kw):
-
 	
 
 
@@ -310,11 +185,13 @@ class CBFS(Fuse):
 
 	workdir = None
 	dirtree = None
+	chunkstore = None
 
 	def __init__(self, *args, **kw):
 		if not ('unittest' in kw and kw['unittest']):
 			Fuse.__init__(self, *args, **kw)
 		self.dirtree = CBFSDirtree()
+		self.workdir = "tmp"
 
 		# passes complete dirtree to other classes (e.g. CBFSFilehandle)
 		global dirtree
@@ -394,14 +271,14 @@ class CBFS(Fuse):
 		del(parent.entries[dir.name])
 
 
-	def symlink(self, path, path1):
-		print "symlink(%s, %s)" % (path, path1)
-		(dirname, sep, symname) = path.rpartition("/")
+	def symlink(self, target, name):
+		print "symlink(%s, %s)" % (target, name)
+		(dirname, sep, symname) = name.rpartition("/")
 		try:
 			dir = self.dirtree.getnode(dirname)
 			if not isinstance(dir, CBFSDirectory):
 				return -errno.EACCES
-			dir.entries[symname] = CBFSSymlink(symname, dir, path1)
+			dir.entries[symname] = CBFSSymlink(symname, dir, target)
 		except:
 			traceback.print_exc()
 			return -errno.ENOENT
@@ -520,11 +397,9 @@ class CBFS(Fuse):
 
 	def fsinit(self):
 		print "fsinit()"
-		self.workdir = "tmp"
 		global chunkstore
-		chunkstore = ChunkStore(self.workdir, 2**19)
-		global nullchunk
-		nullchunk = array('c', '\0' * chunkstore.chunksize)
+		chunkstore = self.chunkstore = ChunkStore(self, self.workdir, 2**19)
+		self.dirtree.chunkstore = chunkstore
 		try:
 			hash = chunkstore.loadinithash()
 			print "loading dirtree from hash %s" % hash
@@ -539,6 +414,7 @@ class CBFS(Fuse):
 		hash = self.dirtree.save()
 		print "dirtree hash: %s" % hash
 		chunkstore.saveinithash(hash)
+		chunkstore.stop()
 	
 
 	def main(self, *a, **kw):

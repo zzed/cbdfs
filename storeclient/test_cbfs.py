@@ -2,7 +2,7 @@
 
 import cbfs, os, stat
 
-from chunkstore import ChunkStore
+from ChunkStore import ChunkStore
 
 
 def compdirs(direntries, names):
@@ -21,9 +21,21 @@ def compdirs(direntries, names):
 			return False
 	return True
 
+def clean_workdir(dir):
+	try:
+		for root, dirs, files in os.walk(dir, False):
+			for f in files:
+				os.unlink(root + "/" + f)
+			os.rmdir(root)
+	except:
+		pass
 
 # setup
+workdir = "unittest_work"
+clean_workdir(workdir)
+os.mkdir(workdir)
 fs = cbfs.CBFS(unittest=True)
+fs.workdir = workdir
 fs.fsinit()
 
 assert(compdirs(fs.readdir("/", 0), [ ".", ".." ]))
@@ -59,7 +71,15 @@ f = cbfs.CBFSFilehandle("/testfile", os.O_CREAT|os.O_RDONLY, 0)
 assert(f.read(20, 3) == "t123")
 # TODO: big file
 
+# link reading and writing
+assert(fs.symlink("testfile", "/link")==None)
+assert(fs.readlink("/link")=="testfile")
+
+assert(fs.unlink("/link")==None)
 assert(fs.unlink("/testfile")==None)
 assert(compdirs(fs.readdir("/", 0), [ ".", ".." ]))
+
+fs.fsdestroy()
+clean_workdir(workdir)
 
 print "\nTests successfully completed! (yai!!)"
