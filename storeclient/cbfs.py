@@ -191,15 +191,23 @@ class CBFSFilehandle(object):
 
 class CBFS(Fuse):
 
-	workdir = None
 	dirtree = None
 	chunkstore = None
 
 	def __init__(self, *args, **kw):
 		if not ('unittest' in kw and kw['unittest']):
 			Fuse.__init__(self, *args, **kw)
+			#print "args: " + str(sys.argv)
+			#if '-c' in sys.argv:
+				#i = sys.argv.index('-c')
+				#if i>=len(sys.argv)-1:
+					#raise Exception("Configuration file not specified!")
+				#config = sys.argv[i+1]
+			#else:
+				#raise Exception("Configuration file not specified!")
+			config = "cbfs.conf"
+			self.chunkstore = ChunkStoreManager(self, config)
 		self.dirtree = CBFSDirtree()
-		self.workdir = "tmp"
 
 		# passes complete dirtree to other classes (e.g. CBFSFilehandle)
 		global dirtree
@@ -393,7 +401,7 @@ class CBFS(Fuse):
 	def statfs(self):
 		print "statfs()"
 		stat = fuse.StatVFS()
-		stat.f_bsize = chunkstore.chunksize
+		stat.f_bsize = self.chunkstore.chunksize
 		stat.f_frsize = stat.f_bsize
 		stat.f_blocks = 111
 		stat.f_bfree = 222
@@ -406,23 +414,19 @@ class CBFS(Fuse):
 	def fsinit(self):
 		print "fsinit()"
 		global chunkstore
-		chunkstore = self.chunkstore = ChunkStoreManager(self.dirtree, self.workdir, 2**19)
-		self.dirtree.chunkstore = chunkstore
+		chunkstore = self.chunkstore
+		self.dirtree.chunkstore = self.chunkstore
 		try:
-			hash = chunkstore.loadinithash()
-			print "loading dirtree from hash %s" % hash
-			self.dirtree.load(hash)
+			self.dirtree.load()
 		except Exception, e:
 			traceback.print_exc()
-			print "exception: %s" % e
 	
 
 	def fsdestroy(self):
 		print "fsdestroy()"
 		hash = self.dirtree.save()
 		print "dirtree hash: %s" % hash
-		chunkstore.saveinithash(hash)
-		chunkstore.stop()
+		self.chunkstore.stop()
 	
 
 	def main(self, *a, **kw):
@@ -433,6 +437,8 @@ class CBFS(Fuse):
 def main():
     usage="""
 Chunk-based filesystem
+
+specify -c <config file>
 
 """ + Fuse.fusage
     server = CBFS(version="%prog " + fuse.__version__, usage=usage, dash_s_do='setsingle')

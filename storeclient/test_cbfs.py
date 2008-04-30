@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 
-import cbfs, os, stat
+import cbfs, os, stat, sys, thread, time, BaseHTTPServer
 
+import CSProtClient
+import CSProtServer
+import ChunkStoreServer
+import ChunkStoreManager
 
 
 def compdirs(direntries, names):
@@ -29,17 +33,53 @@ def clean_workdir(dir):
 	except:
 		pass
 
-# setup
+def server_thread(workdir):
+	css = ChunkStoreServer.ChunkStoreServer(workdir, 2**20)
+	CSProtServer.CSProtServer.csserver = css
+	srv = BaseHTTPServer.HTTPServer(("localhost", 9531), CSProtServer.CSProtServer )
+	try:
+		srv.serve_forever()
+	except KeyboardInterrupt:
+		pass
+	srv.server_close()
+	
+
+def test_print(txt):
+	print "=================== TEST ====================="
+	print " %s" % (txt)
+	print "=============================================="
+
+
+#=====================================
+# prepare tests by starting client and server
 workdir = "unittest_work"
 clean_workdir(workdir)
 os.mkdir(workdir)
+
+thread.start_new_thread(server_thread, (workdir,))
+time.sleep(1) # wait until server runs
+
+
+
+#=====================================
+# setup
 fs = cbfs.CBFS(unittest=True)
-fs.workdir = workdir
+
+csm = ChunkStoreManager.ChunkStoreManager(fs.dirtree, None)
+csm.chunksize = 512*1024
+cs = ChunkStoreManager.ChunkStore("localhost", 9531)
+
+csm.chunkstores = [cs]
+fs.dirtree.chunkstore = csm
+fs.chunkstore = csm
 fs.fsinit()
 
+
+test_print("read /")
 assert(compdirs(fs.readdir("/", 0), [ ".", ".." ]))
 
 # test mkdir
+test_print("mkdir")
 assert(fs.mkdir("/testdir1", 0)==None)
 assert(compdirs(fs.readdir("/", 0), [ ".", "..", "testdir1" ]))
 assert(fs.getattr("/testdir1").st_mode&stat.S_IFDIR)
@@ -47,17 +87,20 @@ assert(fs.mkdir("/testdir2", 0)==None)
 assert(compdirs(fs.readdir("/", 0), [ ".", "..", "testdir1", "testdir2" ]))
 
 # save and load fs-stat
+test_print("test/load fs")
 hash = fs.dirtree.save()
-assert(fs.dirtree.load(hash)==None)
+assert(fs.dirtree.load()==None)
 assert(compdirs(fs.readdir("/", 0), [ ".", "..", "testdir1", "testdir2" ]))
 
 # test rmdir
+test_print("rmdir")
 assert(fs.rmdir("/testdir2")==None)
 assert(compdirs(fs.readdir("/", 0), [ ".", "..", "testdir1" ]))
 assert(fs.rmdir("/testdir1")==None)
 assert(compdirs(fs.readdir("/", 0), [ ".", ".." ]))
 
 # file reading and writing
+test_print("file read/write")
 f = cbfs.CBFSFilehandle("/testfile", os.O_CREAT|os.O_WRONLY, stat.S_IFREG)
 f.write("test123", 0)
 f.release(0)
@@ -71,12 +114,25 @@ assert(f.read(20, 3) == "t123")
 # TODO: big file
 
 # link reading and writing
+test_print("link read/write")
 assert(fs.symlink("testfile", "/link")==None)
 assert(fs.readlink("/link")=="testfile")
 
+
+test_print("remove")
 assert(fs.unlink("/link")==None)
 assert(fs.unlink("/testfile")==None)
 assert(compdirs(fs.readdir("/", 0), [ ".", ".." ]))
+
+# test hashes in store manager (DANGER: destroys inithash!)
+test_print("hash enumeration")
+h = cs.client.loadinithash()
+hashes = cs.client.get_stored_hashes()
+assert(h in hashes)
+cs.client.remove(h)
+hashes = cs.client.get_stored_hashes()
+assert(not h in hashes)
+
 
 fs.fsdestroy()
 clean_workdir(workdir)

@@ -154,17 +154,20 @@ class CBFSDirtree(UsedHashProvider.UsedHashProvider):
 			btodo -= bsize
 
 		print "initial chunk for dirtree: %s" % nexthash
+		self.chunkstore.saveinithash(nexthash)
 		return nexthash
 			
 	
-	def load(self, hash):
-		print "CBFSDirtree.load(%s)" % hash
+	def load(self):
+		print "CBFSDirtree.load()"
+		hash = self.chunkstore.loadinithash()
+		print "loading from hash %s" % hash
 		self.indexhashes = []
 		nexthash = hash
 		rootdump = "" 
 		zerohash = '\0'*self.hashsize
 		while nexthash!=zerohash:
-			print "loading hash %s" % nexthash
+			print "loading hash '%s'" % nexthash
 			self.indexhashes.append(nexthash)
 			chunk = self.chunkstore.get(nexthash)
 			nexthash = chunk[:self.hashsize].tostring()
