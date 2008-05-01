@@ -13,11 +13,11 @@ from array import array
 
 
 class ChunkStore:
-	"represents a ChunkStoreServer"
+	"represents a ChunkStoreServer and caches some local variables"
 
 	stored_hashes = None
-	free_space = None
-	client = None
+	_free_space = None
+	_client = None
 	available = False
 	host = None
 	port = None
@@ -26,18 +26,47 @@ class ChunkStore:
 		print "ChunkStore.__init__(%s, %d)" % (host, port)
 		self.host = host
 		self.port = port
-		self.client = CSProtClient.CSProtClient(host, port)
+		self._client = CSProtClient.CSProtClient(host, port)
 		self.available = True
 		try:
-			self.stored_hashes = self.client.get_stored_hashes()
-			self.free_space = self.client.get_free_space()
-			print "ChunkStore.__init__: initialized client '%s', free space: %d, stored chunks: %d" % (host, self.free_space, len(self.stored_hashes))
+			self.stored_hashes = self._client.get_stored_hashes()
+			self._free_space = self._client.get_free_space()
+			print "ChunkStore.__init__: initialized client '%s', free space: %d, stored chunks: %d" % (host, self._free_space, len(self.stored_hashes))
 			print "stored hashes: " + str(self.stored_hashes)
 		except:
 			print "ChunkStore.__init__: setting store %s to non-available" % self.host
 			self.available = False
 			raise
 	
+	def remove(self, hash):
+		self._client.remove(hash)
+		self.stored_hashes.remove(hash)
+
+	def put(self, chunk):
+		hash = self._client.put(chunk)
+		if not hash in self.stored_hashes:
+			self.stored_hashes.append(hash)
+			self._free_space -= len(chunk)
+		return hash
+
+	def get(self, hash):
+		return self._client.get(hash)
+
+	def getFreeSpace(self):
+		return self._free_space
+
+	def updateFreeSpace(self):
+		self._free_space = self._client.get_free_space()
+
+	def getStoredHashes(self):
+		return self._client.get_stored_hashes()
+
+	def saveInitHash(self, hash):
+		return self._client.saveinithash(hash)
+
+	def loadInitHash(self):
+		return self._client.loadinithash()
+
 
 
 class ChunkStoreManager:
@@ -51,6 +80,9 @@ class ChunkStoreManager:
 	thread_stopped = None
 	chunkstores = None
 
+	# commands to be executed immediately by background thread
+	do_gc = None
+
 	
 	def __init__(self, usedhashprovider, config):
 		print "ChunkStore.__init__(%s)" % (config)
@@ -59,6 +91,7 @@ class ChunkStoreManager:
 		if config is not None:
 			self.__load_config(config)
 		self.thread_stopped = False
+		self.do_gc = False
 		self.shutdown = False
 		thread.start_new_thread(ChunkStoreManager.background_thread, (self, ))
 
@@ -115,16 +148,15 @@ class ChunkStoreManager:
 			for cs in self.chunkstores:
 				print "name: %s, available: %d" % (cs.host, cs.available)
 				if cs.available:
-					if maxcs is None or cs.free_space>maxcs.free_space:
+					if maxcs is None or cs.getFreeSpace()>maxcs.getFreeSpace():
 						maxcs = cs
 			if maxcs is None:
 				raise Exception, "ChunkStoreManager.put: ERROR: failed to find free available chunk store!"
 
 			# now save chunk
 			try:
-				hash = maxcs.client.put(chunk)
+				hash = maxcs.put(chunk)
 				maxcs.stored_hashes.append(hash)
-				maxcs.free_space
 				break
 			except:
 				print "ChunkStore.put: setting store %s to non-available" % maxcs.host
@@ -151,7 +183,7 @@ class ChunkStoreManager:
 				raise Exception("ChunkStoreManager.get: failed to find requested chunk with hash '%s'" % hashstring)
 
 			try:
-				chunk = chunkstore.client.get(hashstring)
+				chunk = chunkstore.get(hashstring)
 				return chunk
 			except:
 				traceback.print_exc()
@@ -166,7 +198,7 @@ class ChunkStoreManager:
 		for cs in self.chunkstores:
 			if cs.available:
 				try:
-					cs.client.saveinithash(hash)
+					cs.saveInitHash(hash)
 				except:
 					print "ChunkStore.saveinithash: setting store %s to non-available" % cs.host
 					cs.available = False
@@ -178,7 +210,7 @@ class ChunkStoreManager:
 		for cs in self.chunkstores:
 			if cs.available:
 				try:
-					hash = cs.client.loadinithash()
+					hash = cs.loadInitHash()
 					return hash
 				except:
 					traceback.print_exc()
@@ -189,17 +221,20 @@ class ChunkStoreManager:
 	def do_chunk_gc(self):
 		"performs chunk garbage collection and checks whether unused chunks are in use"
 		print "ChunkStore.do_chunk_gc()"
-		return
-		# collect all hashes stored here
-		stored = self.localchunks.get_stored_hashes()
-		used = self.usedhashprovider.get_used_hashes()
-		if used is None: return
-		c = 0
-		for h in stored:
-			if not h in used.keys(): 
-				self.localchunks.remove(h)
-				c += 1
-		print "ChunkStoreManager: removed %d chunks during gc" % c
+		# collect all hashes used by filesystem
+		usedhashes = self.usedhashprovider.get_used_hashes()
+			
+		# remove all unused hashes
+		for cs in self.chunkstores:
+			if cs.available:
+				count = 0
+				for h in cs.stored_hashes:
+					if not h in usedhashes:
+						cs.remove(h)
+						count += 1
+				print "ChunkStoreManager.do_chunk_gc: removed %d chunks at host %s" % (count, cs.host)
+
+		# TODO: look if all chunks have enough duplicates
 
 
 	def background_thread(self):
@@ -213,6 +248,9 @@ class ChunkStoreManager:
 				for i in range(1, loop_sleep):
 					time.sleep(1)
 					if self.shutdown: break 
+					if self.do_gc:
+						self.do_chunk_gc()
+						self.do_gc = False
 			print "Chunkstore.background_thread shutting down"
 		except:
 			print "error in ChunkStore.background_thread"

@@ -195,6 +195,7 @@ class CBFS(Fuse):
 	chunkstore = None
 
 	def __init__(self, *args, **kw):
+		self.dirtree = CBFSDirtree()
 		if not ('unittest' in kw and kw['unittest']):
 			Fuse.__init__(self, *args, **kw)
 			#print "args: " + str(sys.argv)
@@ -206,8 +207,7 @@ class CBFS(Fuse):
 			#else:
 				#raise Exception("Configuration file not specified!")
 			config = "cbfs.conf"
-			self.chunkstore = ChunkStoreManager(self, config)
-		self.dirtree = CBFSDirtree()
+			self.chunkstore = ChunkStoreManager(self.dirtree, config)
 
 		# passes complete dirtree to other classes (e.g. CBFSFilehandle)
 		global dirtree

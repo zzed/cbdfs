@@ -126,12 +126,15 @@ assert(compdirs(fs.readdir("/", 0), [ ".", ".." ]))
 
 # test hashes in store manager (DANGER: destroys inithash!)
 test_print("hash enumeration")
-h = cs.client.loadinithash()
-hashes = cs.client.get_stored_hashes()
+h = cs.loadInitHash()
+hashes = cs._client.get_stored_hashes()
 assert(h in hashes)
-cs.client.remove(h)
-hashes = cs.client.get_stored_hashes()
+cs.remove(h)
+hashes = cs._client.get_stored_hashes()
 assert(not h in hashes)
+
+
+# TODO: test garbage collection!
 
 
 fs.fsdestroy()
