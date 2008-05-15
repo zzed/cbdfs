@@ -1,7 +1,14 @@
 #!/usr/bin/env python
 
-import cbfs, os, stat, sys, thread, time, BaseHTTPServer
+import os, stat, sys, thread, time, BaseHTTPServer
 
+# try to find paths to cbdfs modules
+
+d = os.path.dirname(sys.argv[0])
+sys.path.insert(0, d + '/../chunkstore')
+sys.path.insert(0, d + '/../filesystem')
+
+import cbfs
 import CSProtClient
 import CSProtServer
 import ChunkStoreServer
