@@ -400,13 +400,16 @@ class CBFS(Fuse):
 
 	def statfs(self):
 		print "statfs()"
-		stat = fuse.StatVFS()
-		stat.f_bsize = self.chunkstore.chunksize
+		csstat = self.chunkstore.getSpaceStat()
+		stat = fuse.StatVfs()
+		stat.f_bsize = 1
 		stat.f_frsize = stat.f_bsize
-		stat.f_blocks = 111
-		stat.f_bfree = 222
-		stat.f_files = 333
-		stat.f_ffree = 444
+		stat.f_blocks = csstat[1]
+		stat.f_bfree = csstat[1]-csstat[0]
+		stat.f_bavail = stat.f_bfree
+		stat.f_files = csstat[0]
+		stat.f_ffree = stat.f_bfree
+		stat.f_favail = stat.f_bfree
 
 		return stat
 

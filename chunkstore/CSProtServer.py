@@ -22,6 +22,8 @@ class CSProtServer(SocketServer.StreamRequestHandler):
 					self.wfile.write(i + "\n")
 			elif cmd=="get_free_space":
 				self.wfile.write(str(self.csserver.get_free_space()) + "\n")
+			elif cmd=="get_used_space":
+				self.wfile.write(str(self.csserver.get_used_space()) + "\n")
 			elif cmd=="put":
 				size = self.rfile.readline().rstrip()
 				print "CSProtServer.do_GET: size: %s" % size

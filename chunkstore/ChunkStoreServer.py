@@ -37,8 +37,8 @@ class ChunkStoreServer:
 		#while not self.thread_stopped:
 			#time.sleep(1)
 
-	# calculates the path and filename of chunk file
 	def __calcfilename(self, hexdigest):
+		"calculates path and filename of chunk file"
 		return (".", "%s.dat" % hexdigest)
 
 	def put(self, chunk):
@@ -113,33 +113,26 @@ class ChunkStoreServer:
 		print "get_stored_hashes: returning list %s" % files
 		return files
 
-	
-	def get_free_space(self):
+
+	def _updateFreeSpace(self):
 		if self.curspace is None:
 			self.curspace = 0
 			for file in os.listdir(self.rootdir):
 				if fnmatch.fnmatch(file, '*.dat'):
 					self.curspace += os.stat("%s/%s" % (self.rootdir, file)).st_size
+		print "ChunkStoreServer.updateFreeSpace(): %d bytes used" % self.curspace
+
+	
+	def get_free_space(self):
+		self._updateFreeSpace()
 		print "ChunkStoreServer.get_free_space: %d" % (self.maxspace-self.curspace)
 		return self.maxspace-self.curspace
 
-	#def background_thread(self):
-		#try:
-			#initial_sleep = 5
-			#loop_sleep = 120
-			#print "Chunkstore.background_thread started, waiting %d seconds before operation starts ..." % initial_sleep
-			#time.sleep(initial_sleep)
-			#while not self.shutdown:
-				#do_chunk_gc()
-				#for i in range(1, loop_sleep):
-					#time.sleep(1)
-					#if self.shutdown: break 
-			#print "Chunkstore.background_thread shutting down"
-		#except:
-			#print "error in ChunkStore.background_thread"
-			#raise
-		#finally:
-			#self.thread_stopped = True
+	def get_used_space(self):
+		self._updateFreeSpace()
+		print "ChunkStoreServer.get_used_space: %d" % (self.curspace)
+		return self.curspace
+
 
 def load_config(configfile):
 	section = "ChunkStoreServer"

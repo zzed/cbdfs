@@ -7,7 +7,6 @@ import thread
 import time
 import traceback
 import ConfigParser
-import ChunkStoreServer
 import CSProtClient
 from array import array
 
@@ -17,6 +16,7 @@ class ChunkStore:
 
 	stored_hashes = None
 	_free_space = None
+	_maxSpace = None
 	_client = None
 	available = False
 	host = None
@@ -30,7 +30,7 @@ class ChunkStore:
 		self.available = True
 		try:
 			self.stored_hashes = self._client.get_stored_hashes()
-			self._free_space = self._client.get_free_space()
+			self._updateSpace()
 			print "ChunkStore.__init__: initialized client '%s', free space: %d, stored chunks: %d" % (host, self._free_space, len(self.stored_hashes))
 			print "stored hashes: " + str(self.stored_hashes)
 		except:
@@ -55,8 +55,13 @@ class ChunkStore:
 	def getFreeSpace(self):
 		return self._free_space
 
-	def updateFreeSpace(self):
+	def getUsedSpace(self):
+		return self._maxSpace-self._free_space
+	
+	def _updateSpace(self):
 		self._free_space = self._client.get_free_space()
+		used_space = self._client.get_used_space()
+		self._maxSpace = self._free_space+used_space
 
 	def getStoredHashes(self):
 		return self._client.get_stored_hashes()
@@ -114,7 +119,6 @@ class ChunkStoreManager:
 			traceback.print_exc()
 		if count==1:
 			raise Exception("no store host found!")
-
 
 
 	def stop(self):
@@ -218,12 +222,17 @@ class ChunkStoreManager:
 		raise Exception("failed to retrieve init hash (no stores are available!)!")
 
 
-	def do_chunk_gc(self):
+	def _do_chunk_gc(self):
 		"performs chunk garbage collection and checks whether unused chunks are in use"
 		print "ChunkStore.do_chunk_gc()"
 		# collect all hashes used by filesystem
 		usedhashes = self.usedhashprovider.get_used_hashes()
 			
+		# FIXME: here we can get a race condition that results in lost data:
+		# assume that chunk A existed in chunkstores, but was deleted
+		# here it will be removed then. But what happens if it was created in the fs again?
+		# -> chunk will still be deleted, but is needed!
+
 		# remove all unused hashes
 		for cs in self.chunkstores:
 			if cs.available:
@@ -237,6 +246,17 @@ class ChunkStoreManager:
 		# TODO: look if all chunks have enough duplicates
 
 
+	def getSpaceStat(self):
+		"returns tuple containing (currently used space, maximum space) of filesystem"
+		maxsize = 0
+		cursize = 0
+		for cs in self.chunkstores:
+			if cs.available:
+				cursize += cs.getUsedSpace()
+				maxsize += cursize + cs.getFreeSpace()
+		return (cursize, maxsize)
+
+
 	def background_thread(self):
 		try:
 			initial_sleep = 2
@@ -244,12 +264,12 @@ class ChunkStoreManager:
 			print "Chunkstore.background_thread started, waiting %d seconds before operation starts ..." % initial_sleep
 			time.sleep(initial_sleep)
 			while not self.shutdown:
-				self.do_chunk_gc()
+				self._do_chunk_gc()
 				for i in range(1, loop_sleep):
 					time.sleep(1)
 					if self.shutdown: break 
 					if self.do_gc:
-						self.do_chunk_gc()
+						self._do_chunk_gc()
 						self.do_gc = False
 			print "Chunkstore.background_thread shutting down"
 		except:

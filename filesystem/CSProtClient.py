@@ -64,6 +64,14 @@ class CSProtClient:
 		return int(size)
 
 
+	def get_used_space(self):
+		c = self.connect()
+		c.write("get_used_space\n")
+		c.flush()
+		size = c.readline().rstrip()
+		return int(size)
+
+
 	def saveinithash(self, hash):
 		c = self.connect()
 		c.write("save_init_hash\n%s\n" % hash)

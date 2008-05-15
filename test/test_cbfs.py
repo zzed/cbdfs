@@ -85,6 +85,16 @@ fs.fsinit()
 test_print("read /")
 assert(compdirs(fs.readdir("/", 0), [ ".", ".." ]))
 
+test_print("empty fs size")
+sfs = fs.statfs()
+assert(sfs.f_bsize==1)
+assert(sfs.f_frsize==1)
+assert(sfs.f_blocks==2**20)
+assert(sfs.f_bfree==2**20)
+assert(sfs.f_files==sfs.f_blocks-sfs.f_bfree)
+assert(sfs.f_ffree==sfs.f_bfree)
+
+
 # test mkdir
 test_print("mkdir")
 assert(fs.mkdir("/testdir1", 0)==None)
@@ -107,6 +117,7 @@ assert(fs.rmdir("/testdir1")==None)
 assert(compdirs(fs.readdir("/", 0), [ ".", ".." ]))
 
 # file reading and writing
+oldsfs = fs.statfs()
 test_print("file read/write")
 f = cbfs.CBFSFilehandle("/testfile", os.O_CREAT|os.O_WRONLY, stat.S_IFREG)
 f.write("test123", 0)
@@ -118,6 +129,14 @@ f = cbfs.CBFSFilehandle("/testfile", os.O_CREAT|os.O_RDONLY, 0)
 assert(f.read(20, 0) == "test123")
 f = cbfs.CBFSFilehandle("/testfile", os.O_CREAT|os.O_RDONLY, 0)
 assert(f.read(20, 3) == "t123")
+# test fs size
+sfs = fs.statfs()
+assert(sfs.f_bsize==1)
+assert(sfs.f_frsize==1)
+assert(sfs.f_blocks==2**20)
+assert(sfs.f_bfree==oldsfs.f_bfree-7)
+assert(sfs.f_files==sfs.f_blocks-sfs.f_bfree)
+assert(sfs.f_ffree==sfs.f_bfree)
 # TODO: big file
 
 # link reading and writing
