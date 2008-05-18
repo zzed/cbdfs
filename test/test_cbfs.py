@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os, stat, sys, thread, time, BaseHTTPServer
+import os, stat, sys, thread, time, BaseHTTPServer, cProfile
 
 # try to find paths to cbdfs modules
 
@@ -55,6 +55,16 @@ def test_print(txt):
 	print "=================== TEST ====================="
 	print " %s" % (txt)
 	print "=============================================="
+
+def writeBigFile():
+	buf = ""
+	for i in range(0, 2000):
+		buf += str(i)
+	f = cbfs.CBFSFilehandle("/bigfile", os.O_CREAT|os.O_WRONLY, stat.S_IFREG)
+	for i in range(0, 10*1024*1024/len(buf)):
+		f.write(buf, i*len(buf))
+	f.release(0)
+	assert(fs.unlink("/bigfile")==None)
 
 
 #=====================================
@@ -137,7 +147,10 @@ assert(sfs.f_blocks==2**20)
 assert(sfs.f_bfree==oldsfs.f_bfree-7)
 assert(sfs.f_files==sfs.f_blocks-sfs.f_bfree)
 assert(sfs.f_ffree==sfs.f_bfree)
-# TODO: big file
+
+test_print("write big file: for profiling")
+cProfile.run("writeBigFile()", "cbdfsprof")
+
 
 # link reading and writing
 test_print("link read/write")
