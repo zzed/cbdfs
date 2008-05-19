@@ -1,5 +1,5 @@
 import socket
-from array import array
+from cStringIO import StringIO
 
 class CSProtClient:
 	"manages the HTTP connection to ChunkStoreServers"
@@ -21,9 +21,9 @@ class CSProtClient:
 	def put(self, chunk):
 		c = self.connect()
 		body = "put\n"
-		body += str(len(chunk)) + "\n"
-		body += chunk.tostring()
+		body += str(len(chunk.getvalue())) + "\n"
 		c.write(body)
+		c.write(chunk.getvalue())
 		c.flush()
 		hash = c.readline().rstrip()
 		return hash
@@ -33,8 +33,7 @@ class CSProtClient:
 		c.write("get\n%s\n" % hash)
 		c.flush()
 		s = int(c.readline().rstrip())
-		data = c.read(s)
-		chunk = array('c', data)
+		chunk = StringIO(c.read(s))
 		return chunk
 
 	def remove(self, hash):

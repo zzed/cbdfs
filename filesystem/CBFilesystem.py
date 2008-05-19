@@ -6,7 +6,7 @@ import stat
 import threading
 import cPickle
 import UsedHashProvider
-from array import array
+from cStringIO import StringIO
 from ChunkStoreManager import ChunkStoreManager
 
 
@@ -145,10 +145,11 @@ class CBFSDirtree(UsedHashProvider.UsedHashProvider):
 		btodo = len(rootdump)
 		nexthash = '\0'*self.hashsize
 		while btodo>0:
-			chunk = array('c', nexthash)
+			chunk = StringIO()
+			chunk.write(nexthash)
 			bstart = max(0, btodo-bsize)
 			print "bstart: %d, btodo: %d, len(rootdump): %d" % (bstart, btodo, len(rootdump))
-			chunk.extend(array('c', rootdump[bstart:bstart+min(bsize, btodo)]))
+			chunk.write(rootdump[bstart:bstart+min(bsize, btodo)])
 			print "saving chunk with nexthash %s" % nexthash
 			nexthash = self.chunkstore.put(chunk)
 			btodo -= bsize
@@ -170,8 +171,9 @@ class CBFSDirtree(UsedHashProvider.UsedHashProvider):
 			print "loading hash '%s'" % nexthash
 			self.indexhashes.append(nexthash)
 			chunk = self.chunkstore.get(nexthash)
-			nexthash = chunk[:self.hashsize].tostring()
-			rootdump += chunk[self.hashsize:].tostring()
+			chunk.seek(0)
+			nexthash = chunk.read(self.hashsize)
+			rootdump += chunk.read()
 		print "dirtree size: %d" % len(rootdump)
 
 		self.root = cPickle.loads(rootdump)

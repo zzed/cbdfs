@@ -9,6 +9,7 @@ import traceback
 import ConfigParser
 import CSProtClient
 from array import array
+from cStringIO import StringIO
 
 
 class ChunkStore:
@@ -27,50 +28,65 @@ class ChunkStore:
 		self.host = host
 		self.port = port
 		self._client = CSProtClient.CSProtClient(host, port)
-		self.available = True
+		self.checkStore()
+	
+
+	def checkStore(self):
 		try:
 			self.stored_hashes = self._client.get_stored_hashes()
 			self._updateSpace()
-			print "ChunkStore.__init__: initialized client '%s', free space: %d, stored chunks: %d" % (host, self._free_space, len(self.stored_hashes))
+			print "ChunkStore.checkStore: initialized client '%s', free space: %d, stored chunks: %d" % (self.host, self._free_space, len(self.stored_hashes))
 			print "stored hashes: " + str(self.stored_hashes)
+			self.available = True
 		except:
-			print "ChunkStore.__init__: setting store %s to non-available" % self.host
+			traceback.print_exc()
+			print "ChunkStore.checkStore: setting store %s to non-available" % self.host
 			self.available = False
-			raise
 	
+
 	def remove(self, hash):
 		self._client.remove(hash)
 		self.stored_hashes.remove(hash)
+
 
 	def put(self, chunk):
 		hash = self._client.put(chunk)
 		if not hash in self.stored_hashes:
 			self.stored_hashes.append(hash)
-			self._free_space -= len(chunk)
+			self._free_space -= len(chunk.getvalue())
 		return hash
+
 
 	def get(self, hash):
 		return self._client.get(hash)
 
+
 	def getFreeSpace(self):
 		return self._free_space
+
 
 	def getUsedSpace(self):
 		return self._maxSpace-self._free_space
 	
+
 	def _updateSpace(self):
 		self._free_space = self._client.get_free_space()
 		used_space = self._client.get_used_space()
 		self._maxSpace = self._free_space+used_space
 
+
 	def getStoredHashes(self):
 		return self._client.get_stored_hashes()
+
 
 	def saveInitHash(self, hash):
 		return self._client.saveinithash(hash)
 
+
 	def loadInitHash(self):
 		return self._client.loadinithash()
+
+
 
 
 
@@ -84,13 +100,15 @@ class ChunkStoreManager:
 	shutdown = None
 	thread_stopped = None
 	chunkstores = None
+	emptyhash = None
 
 	# commands to be executed immediately by background thread
 	do_gc = None
 
 	
-	def __init__(self, usedhashprovider, config):
+	def __init__(self, usedhashprovider, config, chunksize = None):
 		print "ChunkStore.__init__(%s)" % (config)
+		self.chunksize = chunksize
 		self.usedhashprovider = usedhashprovider
 		self.chunkstores = []
 		if config is not None:
@@ -99,6 +117,9 @@ class ChunkStoreManager:
 		self.do_gc = False
 		self.shutdown = False
 		thread.start_new_thread(ChunkStoreManager.background_thread, (self, ))
+
+		# calculate hash value for empty chunk
+		self.emptyhash = self.calcHash(StringIO('\0'*self.chunksize))
 
 
 	def __load_config(self, configfile):
@@ -129,23 +150,20 @@ class ChunkStoreManager:
 
 
 	def put(self, chunk):
-		print "ChunkStore.put(chunklen: %d)" % len(chunk)
-		assert(len(chunk)<=self.chunksize, "given chunk is larger than chunksize (%u)" % self.chunksize)
+		print "ChunkStore.put(chunklen: %d)" % len(chunk.getvalue())
+		assert(len(chunk.getvalue())<=self.chunksize, "given chunk is larger than chunksize (%u)" % self.chunksize)
 
 		# special case for zero-length chunks
-		if len(chunk)==0:
+		if len(chunk.getvalue())==0:
 			return "0";
 
-		h = self.hashalgo.copy()
-		h.update(chunk)
-		hash = h.hexdigest()
+		hash = self.calcHash(chunk)
 
 		# look if chunk is already stored
 		for cs in self.chunkstores:
 			if cs.available and hash in cs.stored_hashes:
 				return hash
 				
-		
 		while True:
 			# select some chunk store which has most available space
 			maxcs = None
@@ -222,7 +240,14 @@ class ChunkStoreManager:
 		raise Exception("failed to retrieve init hash (no stores are available!)!")
 
 
-	def _do_chunk_gc(self):
+	def _checkStores(self):
+		"checks all unavailable chunk stores if they are available again"
+		for cs in self.chunkstores:
+			if not cs.available:
+				cs.checkStore()
+
+
+	def _doChunkStoreGC(self):
 		"performs chunk garbage collection and checks whether unused chunks are in use"
 		print "ChunkStore.do_chunk_gc()"
 		# collect all hashes used by filesystem
@@ -246,6 +271,13 @@ class ChunkStoreManager:
 		# TODO: look if all chunks have enough duplicates
 
 
+	def calcHash(self, chunk):
+		"returns hash value of given chunk"
+		h = self.hashalgo.copy()
+		h.update(chunk.getvalue())
+		return h.hexdigest()
+
+
 	def getSpaceStat(self):
 		"returns tuple containing (currently used space, maximum space) of filesystem"
 		maxsize = 0
@@ -264,7 +296,8 @@ class ChunkStoreManager:
 			print "Chunkstore.background_thread started, waiting %d seconds before operation starts ..." % initial_sleep
 			time.sleep(initial_sleep)
 			while not self.shutdown:
-				self._do_chunk_gc()
+				self._checkStores()
+				self._doChunkStoreGC()
 				for i in range(1, loop_sleep):
 					time.sleep(1)
 					if self.shutdown: break 

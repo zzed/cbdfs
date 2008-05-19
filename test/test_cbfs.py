@@ -82,8 +82,7 @@ time.sleep(1) # wait until server runs
 # setup
 fs = cbfs.CBFS(unittest=True)
 
-csm = ChunkStoreManager.ChunkStoreManager(fs.dirtree, None)
-csm.chunksize = 512*1024
+csm = ChunkStoreManager.ChunkStoreManager(fs.dirtree, None, 512*1024)
 cs = ChunkStoreManager.ChunkStore("localhost", 9531)
 
 csm.chunkstores = [cs]

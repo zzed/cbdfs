@@ -8,8 +8,8 @@ sys.path.append("fuse-build")
 import fuse
 import traceback
 import stat
-from array import array
 from fuse import Fuse
+from cStringIO import StringIO
 
 from CBFilesystem import CBFSStat, CBFSDirectory, CBFSFile, CBFSSymlink, CBFSDirtree
 
@@ -57,10 +57,12 @@ class CBFSFilehandle(object):
 			self.node = pdir.entries[fn] = CBFSFile(fn, pdir)
 			if len(mode)>0: self.node.st.st_mode = mode[0]
 
+
 		filemode = self.node.st.st_mode
 		if (filemode & stat.S_IFREG) == 0:
 			print "resulting file is no regular file, not allowed!"
 			return -errno.EACCES
+
 	
 
 	def __writechunk(self):
@@ -82,11 +84,9 @@ class CBFSFilehandle(object):
 		if chunkindex>=len(self.node.hashes):
 			# fill up all non-existing space in file with empty chunks ...
 			# create more than one chunk at once
-			chunk = array('c')
-			hash = chunkstore.put(chunk)
 			for i in range(0, chunkindex-len(self.node.hashes)+1):
-				self.node.hashes.append(hash)
-			self.actchunk = chunk
+				self.node.hashes.append(chunkstore.emptyhash)
+			self.actchunk = StringIO()
 		else:
 			self.actchunk = chunkstore.get(self.node.hashes[chunkindex])
 
@@ -106,7 +106,8 @@ class CBFSFilehandle(object):
 
 			for chunkid in range(chunkidx, chunkidx+chunkamount):
 				self.__loadchunk(chunkid)
-				data += self.actchunk[byteidx:byteidx+bytesleft].tostring()
+				self.actchunk.seek(byteidx)
+				data += self.actchunk.read(bytesleft)
 				bytesleft = length-len(data)
 				byteidx = 0
 		finally:
@@ -130,8 +131,8 @@ class CBFSFilehandle(object):
 					count = chunkstore.chunksize-coff
 
 				# write data to chunk
-				if coff+count>len(self.actchunk): self.actchunk.extend('\0' * (coff+count-len(self.actchunk)))
-				self.actchunk[coff:coff+count] = array('c', buf[bidx:bidx+count])
+				self.actchunk.seek(coff)
+				self.actchunk.write(buf[bidx:bidx+count])
 				self.actcmodified = True
 				bidx += count
 			
