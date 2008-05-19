@@ -42,6 +42,8 @@ class ChunkStore:
 			traceback.print_exc()
 			print "ChunkStore.checkStore: setting store %s to non-available" % self.host
 			self.available = False
+
+		return self.available
 	
 
 	def remove(self, hash):
@@ -189,6 +191,20 @@ class ChunkStoreManager:
 		return hash
 
 
+	def _getChunkStore(self, hash):
+		"returns a chunk store that offers given hash"
+		for cs in self.chunkstores:
+			if cs.available and hash in cs.stored_hashes:
+				return cs
+
+		# now search all unavailable chunk stores and try to reconnect to them
+		for cs in self.chunkstores:
+			if hash in cs.stored_hashes and cs.checkStore():
+				return cs
+
+		return None
+
+
 	def get(self, hashstring):
 		# special case for zero-length chunks
 		if hashstring=="0":
@@ -196,11 +212,7 @@ class ChunkStoreManager:
 
 		while True:
 			# where is chunk stored?
-			chunkstore = None
-			for cs in self.chunkstores:
-				if cs.available and hashstring in cs.stored_hashes:
-					chunkstore = cs
-					break
+			chunkstore = self._getChunkStore(hashstring)
 			if chunkstore is None:
 				raise Exception("ChunkStoreManager.get: failed to find requested chunk with hash '%s'" % hashstring)
 
