@@ -39,7 +39,7 @@ class ChunkStoreServer:
 
 	def __calcfilename(self, hexdigest):
 		"calculates path and filename of chunk file"
-		return (".", "%s.dat" % hexdigest)
+		return ("%s/%s" % (hexdigest[0:2], hexdigest[2:4]), "%s.dat" % hexdigest[4:])
 
 	def put(self, chunk):
 		print "ChunkStore.put(chunklen: %d)" % len(chunk)
@@ -53,8 +53,11 @@ class ChunkStoreServer:
 		d = hash.hexdigest()
 		print "ChunkStore.put: hash '%s'" % d
 		(fpath, fname) = self.__calcfilename(d)
-		compname = "%s/%s/%s" % (self.rootdir, fpath, fname)
+		comppath = "%s/%s" % (self.rootdir, fpath)
+		compname = "%s/%s" % (comppath, fname)
 		print "compname: " + compname
+		if not os.access(comppath, os.X_OK):
+			os.makedirs(comppath)
 		if os.access(compname, os.F_OK|os.R_OK|os.W_OK):
 			# file already exists, we don't need to do anything
 			print "ChunkStore.put: file already exists"
@@ -107,10 +110,17 @@ class ChunkStoreServer:
 	
 	def get_stored_hashes(self):
 		files = []
-		for file in os.listdir(self.rootdir):
-			if fnmatch.fnmatch(file, '*.dat'):
-				files.append(file[:-4])
-		print "get_stored_hashes: returning list %s" % files
+		for p1 in os.listdir(self.rootdir):
+			print "p1: %s" % p1
+			if os.path.isdir("%s/%s" % (self.rootdir, p1)):
+				for p2 in os.listdir("%s/%s" % (self.rootdir, p1)):
+					print "p2: %s" % p2
+					if os.path.isdir("%s/%s/%s" % (self.rootdir, p1, p2)):
+						for file in os.listdir("%s/%s/%s" % (self.rootdir, p1, p2)):
+							print "file: %s" % file
+							if fnmatch.fnmatch(file, "*.dat"):
+								files.append(''.join([p1, p2, file[:-4]]))
+		print "get_stored_hashes: returning list length %d" % len(files)
 		return files
 
 
