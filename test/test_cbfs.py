@@ -58,10 +58,10 @@ def test_print(txt):
 
 def writeBigFile():
 	buf = ""
-	for i in range(0, 2000):
+	for i in range(0, 10000):
 		buf += str(i)
 	f = cbfs.CBFSFilehandle("/bigfile", os.O_CREAT|os.O_WRONLY, stat.S_IFREG)
-	for i in range(0, 10*1024*1024/len(buf)):
+	for i in range(0, 1024*1024/len(buf)):
 		f.write(buf, i*len(buf))
 	f.release(0)
 	assert(fs.unlink("/bigfile")==None)
