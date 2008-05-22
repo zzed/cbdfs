@@ -16,58 +16,58 @@ import ChunkStoreManager
 
 
 def compdirs(direntries, names):
-	'''compares two lists with direntries, if all elements contain the same name'''
-	direntries = list(direntries)
-	if len(direntries) != len(names): 
-		n = []
-		for i in direntries: n.append(i.name)
-		print("compdirs: received: %s\n          expected: %s" % (n, names))
-		return False
-	for i in direntries:
-		if not i.name in names:
-			n = []
-			for i in direntries: n.append(i.name)
-			print("compdirs: received: %s\n          expected: %s" % (n, names))
-			return False
-	return True
+    '''compares two lists with direntries, if all elements contain the same name'''
+    direntries = list(direntries)
+    if len(direntries) != len(names): 
+        n = []
+        for i in direntries: n.append(i.name)
+        print("compdirs: received: %s\n          expected: %s" % (n, names))
+        return False
+    for i in direntries:
+        if not i.name in names:
+            n = []
+            for i in direntries: n.append(i.name)
+            print("compdirs: received: %s\n          expected: %s" % (n, names))
+            return False
+    return True
 
 def clean_workdir(dir):
-	try:
-		for root, dirs, files in os.walk(dir, False):
-			for f in files:
-				os.unlink(root + "/" + f)
-			os.rmdir(root)
-	except:
-		pass
+    try:
+        for root, dirs, files in os.walk(dir, False):
+            for f in files:
+                os.unlink(root + "/" + f)
+            os.rmdir(root)
+    except:
+        pass
 
 def server_thread(workdir):
-	css = ChunkStoreServer.ChunkStoreServer(workdir, 2**20)
-	CSProtServer.CSProtServer.csserver = css
-	srv = BaseHTTPServer.HTTPServer(("localhost", 9531), CSProtServer.CSProtServer )
-	try:
-		srv.serve_forever()
-	except KeyboardInterrupt:
-		pass
-	srv.server_close()
-	
+    css = ChunkStoreServer.ChunkStoreServer(workdir, 2**20)
+    CSProtServer.CSProtServer.csserver = css
+    srv = BaseHTTPServer.HTTPServer(("localhost", 9531), CSProtServer.CSProtServer )
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    srv.server_close()
+    
 
 def test_print(txt):
-	print "=================== TEST ====================="
-	print " %s" % (txt)
-	print "=============================================="
+    print "=================== TEST ====================="
+    print " %s" % (txt)
+    print "=============================================="
 
 def testBigFile():
-	buf = ""
-	for i in range(0, 10000):
-		buf += str(i)
-	f = cbfs.CBFSFilehandle("/bigfile", os.O_CREAT|os.O_WRONLY, stat.S_IFREG)
-	for i in range(0, 1024*1024/len(buf)):
-		f.write(buf, i*len(buf))
-	f.release(0)
-	f = cbfs.CBFSFilehandle("/bigfile", os.O_RDONLY, stat.S_IFREG)
-	for i in range(0, 1024*1024/len(buf)):
-		assert(f.read(len(buf), i*len(buf))==buf)
-	assert(fs.unlink("/bigfile")==None)
+    buf = ""
+    for i in range(0, 10000):
+        buf += str(i)
+    f = cbfs.CBFSFilehandle("/bigfile", os.O_CREAT|os.O_WRONLY, stat.S_IFREG)
+    for i in range(0, 1024*1024/len(buf)):
+        f.write(buf, i*len(buf))
+    f.release(0)
+    f = cbfs.CBFSFilehandle("/bigfile", os.O_RDONLY, stat.S_IFREG)
+    for i in range(0, 1024*1024/len(buf)):
+        assert(f.read(len(buf), i*len(buf))==buf)
+    assert(fs.unlink("/bigfile")==None)
 
 
 #=====================================
