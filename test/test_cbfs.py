@@ -56,7 +56,7 @@ def test_print(txt):
 	print " %s" % (txt)
 	print "=============================================="
 
-def writeBigFile():
+def testBigFile():
 	buf = ""
 	for i in range(0, 10000):
 		buf += str(i)
@@ -64,6 +64,9 @@ def writeBigFile():
 	for i in range(0, 1024*1024/len(buf)):
 		f.write(buf, i*len(buf))
 	f.release(0)
+	f = cbfs.CBFSFilehandle("/bigfile", os.O_RDONLY, stat.S_IFREG)
+	for i in range(0, 1024*1024/len(buf)):
+		assert(f.read(len(buf), i*len(buf))==buf)
 	assert(fs.unlink("/bigfile")==None)
 
 
@@ -129,26 +132,30 @@ assert(compdirs(fs.readdir("/", 0), [ ".", ".." ]))
 oldsfs = fs.statfs()
 test_print("file read/write")
 f = cbfs.CBFSFilehandle("/testfile", os.O_CREAT|os.O_WRONLY, stat.S_IFREG)
-f.write("test123", 0)
+filecontent = "test123\1\2\3\4\5\6\7\8\9test"
+print "write: " + filecontent
+f.write(filecontent, 0)
 f.release(0)
 assert(compdirs(fs.readdir("/", 0), [ ".", "..", "testfile" ]))
 assert(fs.getattr("/testfile").st_mode&stat.S_IFREG)
-assert(fs.getattr("/testfile").st_size == 7)
+assert(fs.getattr("/testfile").st_size == len(filecontent))
 f = cbfs.CBFSFilehandle("/testfile", os.O_CREAT|os.O_RDONLY, 0)
-assert(f.read(20, 0) == "test123")
+indata = f.read(30, 0)
+print "read: " + indata
+assert(indata == filecontent)
 f = cbfs.CBFSFilehandle("/testfile", os.O_CREAT|os.O_RDONLY, 0)
-assert(f.read(20, 3) == "t123")
+assert(f.read(30, 3) == filecontent[3:])
 # test fs size
 sfs = fs.statfs()
 assert(sfs.f_bsize==1)
 assert(sfs.f_frsize==1)
 assert(sfs.f_blocks==2**20)
-assert(sfs.f_bfree==oldsfs.f_bfree-7)
+assert(sfs.f_bfree==oldsfs.f_bfree-len(filecontent))
 assert(sfs.f_files==sfs.f_blocks-sfs.f_bfree)
 assert(sfs.f_ffree==sfs.f_bfree)
 
 test_print("write big file: for profiling")
-cProfile.run("writeBigFile()", "cbdfsprof")
+cProfile.run("testBigFile();", "cbdfsprof")
 
 
 # link reading and writing

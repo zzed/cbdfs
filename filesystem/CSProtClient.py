@@ -29,6 +29,7 @@ class CSProtClient:
 		return hash
 
 	def get(self, hash):
+		print "CSProtClient.get(%s)" % hash
 		c = self.connect()
 		c.write("get\n%s\n" % hash)
 		c.flush()
