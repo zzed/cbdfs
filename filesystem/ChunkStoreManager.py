@@ -261,7 +261,7 @@ class ChunkStoreManager:
 
     def _doChunkStoreGC(self):
         "performs chunk garbage collection and checks whether unused chunks are in use"
-        print "ChunkStore.do_chunk_gc()"
+        print "ChunkStore._doChunkStoreGC()"
         # collect all hashes used by filesystem
         usedhashes = self.usedhashprovider.get_used_hashes()
             
@@ -278,7 +278,7 @@ class ChunkStoreManager:
                     if not h in usedhashes:
                         cs.remove(h)
                         count += 1
-                print "ChunkStoreManager.do_chunk_gc: removed %d chunks at host %s" % (count, cs.host)
+                print "ChunkStoreManager._doChunkStoreGC: removed %d chunks at host %s" % (count, cs.host)
 
         # TODO: look if all chunks have enough duplicates
 
@@ -297,7 +297,7 @@ class ChunkStoreManager:
         for cs in self.chunkstores:
             if cs.available:
                 cursize += cs.getUsedSpace()
-                maxsize += cursize + cs.getFreeSpace()
+                maxsize += cs.getUsedSpace() + cs.getFreeSpace()
         return (cursize, maxsize)
 
 

@@ -20,6 +20,7 @@ class ChunkStoreServer:
     hashsize = 128
     maxspace = None
     curspace = None
+    _storedHashes = None
 
     def __init__(self, rootdir, maxspace):
         print "ChunkStoreServer.__init__(%s, %s)" % (rootdir, maxspace)
@@ -28,7 +29,9 @@ class ChunkStoreServer:
         self.thread_stopped = False
         if not os.path.exists(self.rootdir): 
             os.makedirs(self.rootdir)
+        self._updateStoredHashes()
         self.get_free_space()
+        
 
 
     def stop(self):
@@ -52,6 +55,11 @@ class ChunkStoreServer:
         hash.update(chunk)
         d = hash.hexdigest()
         print "ChunkStore.put: hash '%s'" % d
+        
+        if d in self._storedHashes:
+        	# already in filesystem stored, we do not need to do anything
+        	return d
+        
         (fpath, fname) = self.__calcfilename(d)
         comppath = "%s/%s" % (self.rootdir, fpath)
         compname = "%s/%s" % (comppath, fname)
@@ -65,6 +73,7 @@ class ChunkStoreServer:
         with open(compname, "w") as f:
             chunk.tofile(f)
             self.curspace += len(chunk)
+        self._storedHashes.append(d)
         return d
 
 
@@ -105,41 +114,42 @@ class ChunkStoreServer:
         compname = "%s/%s/%s" % (self.rootdir, fpath, fname)
         self.curspace -= os.stat(compname).st_size
         os.remove(compname)
-        # TODO: remove paths which are unneeded
+        self._storedHashes.remove(hashstring)
 
     
     def get_stored_hashes(self):
-        files = []
+        return self._storedHashes
+
+
+    def _updateStoredHashes(self):
+    	print "Indexing currently stored hashes, please wait ..."
+    	print "[" + (' ' * 16) + "]\r[",
+        self.curspace = 0
+        self._storedHashes = []
+        count = 1
         for p1 in os.listdir(self.rootdir):
-            print "p1: %s" % p1
+            count += 1
+            if count%16==0:
+                sys.stdout.write(".")
+                sys.stdout.flush()
             if os.path.isdir("%s/%s" % (self.rootdir, p1)):
                 for p2 in os.listdir("%s/%s" % (self.rootdir, p1)):
-                    print "p2: %s" % p2
                     if os.path.isdir("%s/%s/%s" % (self.rootdir, p1, p2)):
                         for file in os.listdir("%s/%s/%s" % (self.rootdir, p1, p2)):
-                            print "file: %s" % file
                             if fnmatch.fnmatch(file, "*.dat"):
-                                files.append(''.join([p1, p2, file[:-4]]))
-        print "get_stored_hashes: returning list length %d" % len(files)
-        return files
-
-
-    def _updateFreeSpace(self):
-        if self.curspace is None:
-            self.curspace = 0
-            for file in os.listdir(self.rootdir):
-                if fnmatch.fnmatch(file, '*.dat'):
-                    self.curspace += os.stat("%s/%s" % (self.rootdir, file)).st_size
-        print "ChunkStoreServer.updateFreeSpace(): %d bytes used" % self.curspace
+                                self._storedHashes.append(''.join([p1, p2, file[:-4]]))
+                                self.curspace += os.stat("%s/%s/%s/%s" % (self.rootdir, p1, p2, file)).st_size
+        for i in range(count/16,16):
+        	sys.stdout.write(".")
+        print "\nStored hashes: %d" % len(self._storedHashes)
+        print "Used space: %d bytes" % self.curspace
 
     
     def get_free_space(self):
-        self._updateFreeSpace()
         print "ChunkStoreServer.get_free_space: %d" % (self.maxspace-self.curspace)
         return self.maxspace-self.curspace
 
     def get_used_space(self):
-        self._updateFreeSpace()
         print "ChunkStoreServer.get_used_space: %d" % (self.curspace)
         return self.curspace
 
