@@ -103,6 +103,7 @@ class ChunkStoreManager:
     thread_stopped = None
     chunkstores = None
     emptyhash = None
+    allowGC = None
 
     # commands to be executed immediately by background thread
     do_gc = None
@@ -117,6 +118,7 @@ class ChunkStoreManager:
             self.__load_config(config)
         self.thread_stopped = False
         self.do_gc = False
+        self.allowGC = False
         self.shutdown = False
         thread.start_new_thread(ChunkStoreManager.background_thread, (self, ))
 
@@ -305,10 +307,11 @@ class ChunkStoreManager:
 
     def background_thread(self):
         try:
-            initial_sleep = 2
             loop_sleep = 120
-            print "Chunkstore.background_thread started, waiting %d seconds before operation starts ..." % initial_sleep
-            time.sleep(initial_sleep)
+            print "Chunkstore.background_thread started, waiting until system was initalized ..."
+            while not self.allowGC and not self.shutdown:
+                time.sleep(1)
+            print "Chunkstore.background_thread: starting operation"
             while not self.shutdown:
                 self._checkStores()
                 self._doChunkStoreGC()

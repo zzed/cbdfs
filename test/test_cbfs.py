@@ -43,7 +43,7 @@ def clean_workdir(dir):
 def server_thread(workdir):
     css = ChunkStoreServer.ChunkStoreServer(workdir, 2**20)
     CSProtServer.CSProtServer.csserver = css
-    srv = BaseHTTPServer.HTTPServer(("localhost", 9531), CSProtServer.CSProtServer )
+    srv = CSProtServer.CSProtServer("localhost", 9531) 
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

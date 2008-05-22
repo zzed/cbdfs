@@ -161,22 +161,33 @@ class CBFSDirtree(UsedHashProvider.UsedHashProvider):
     
     def load(self):
         print "CBFSDirtree.load()"
-        hash = self.chunkstore.loadinithash()
-        print "loading from hash %s" % hash
-        self.indexhashes = []
-        nexthash = hash
-        rootdump = "" 
-        zerohash = '\0'*self.hashsize
-        while nexthash!=zerohash:
-            print "loading hash '%s'" % nexthash
-            self.indexhashes.append(nexthash)
-            chunk = self.chunkstore.get(nexthash)
-            chunk.seek(0)
-            nexthash = chunk.read(self.hashsize)
-            rootdump += chunk.read()
-        print "dirtree size: %d" % len(rootdump)
-
-        self.root = cPickle.loads(rootdump)
+        hash = ""
+        try:
+        	hash = self.chunkstore.loadinithash()
+    	except:
+        	print "CBFSDirtree.load(): failed to get initial hash. assuming that filesystem is empty ..."
+        
+        if hash!="":		
+	        print "loading from hash %s" % hash
+	        try:
+		        self.indexhashes = []
+		        nexthash = hash
+		        rootdump = "" 
+		        zerohash = '\0'*self.hashsize
+		        while nexthash!=zerohash:
+		            print "loading hash '%s'" % nexthash
+		            self.indexhashes.append(nexthash)
+		            chunk = self.chunkstore.get(nexthash)
+		            chunk.seek(0)
+		            nexthash = chunk.read(self.hashsize)
+		            rootdump += chunk.read()
+		        print "dirtree size: %d" % len(rootdump)
+		
+		        self.root = cPickle.loads(rootdump)
+       		except:
+       			print "ATTENTION: unrecoverable error during load of directory structure. will not continue initializing"
+       			raise
+       	self.chunkstore.allowGC = True
     
 
     def get_used_hashes(self):

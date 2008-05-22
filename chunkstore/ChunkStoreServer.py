@@ -124,14 +124,17 @@ class ChunkStoreServer:
 
 
     def remove(self, hashstring):
+    	print "ChunkStoreServer.remove(%s)" % hashstring
     	try:
 	        (fpath, fname) = self.__calcfilename(hashstring)
 	        compname = "%s/%s/%s" % (self.rootdir, fpath, fname)
 	        self.curspace -= os.stat(compname).st_size
-	        os.remove(compname)
-	        self._storedHashes.remove(hashstring)
+	        os.remove(compname)	        
         except:
 	    	traceback.print_exc()
+
+        if hashstring in self._storedHashes:
+        	self._storedHashes.remove(hashstring)
 
     
     def get_stored_hashes(self):
@@ -196,7 +199,8 @@ if __name__ == '__main__':
 
     csserver = ChunkStoreServer(rootdir, maxspace)
     CSProtServer.CSProtServer.csserver = csserver
-    dispatcher = SocketServer.ForkingTCPServer(('', port), CSProtServer.CSProtServer)
+    dispatcher = CSProtServer.CSProtServer('', port)
+    #dispatcher = SocketServer.ForkingTCPServer(('', port), CSProtServer.CSProtServer)
     print 'listening on %d ...' % port
     
     try:
