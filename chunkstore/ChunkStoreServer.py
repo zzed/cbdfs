@@ -7,6 +7,7 @@ import sys
 import ConfigParser
 import BaseHTTPServer
 import SocketServer
+import traceback
 from array import array 
 
 import CSProtServer
@@ -51,30 +52,34 @@ class ChunkStoreServer:
         if len(chunk)==0:
             return "0";
 
-        hash = self.hashalgo.copy()
-        hash.update(chunk)
-        d = hash.hexdigest()
-        print "ChunkStore.put: hash '%s'" % d
-        
-        if d in self._storedHashes:
-        	# already in filesystem stored, we do not need to do anything
-        	return d
-        
-        (fpath, fname) = self.__calcfilename(d)
-        comppath = "%s/%s" % (self.rootdir, fpath)
-        compname = "%s/%s" % (comppath, fname)
-        print "compname: " + compname
-        if not os.access(comppath, os.X_OK):
-            os.makedirs(comppath)
-        if os.access(compname, os.F_OK|os.R_OK|os.W_OK):
-            # file already exists, we don't need to do anything
-            print "ChunkStore.put: file already exists"
-            return d
-        with open(compname, "w") as f:
-            chunk.tofile(f)
-            self.curspace += len(chunk)
-        self._storedHashes.append(d)
-        return d
+        try:
+	        hash = self.hashalgo.copy()
+	        hash.update(chunk)
+	        d = hash.hexdigest()
+	        print "ChunkStore.put: hash '%s'" % d
+	        
+	        if d in self._storedHashes:
+	        	# already in filesystem stored, we do not need to do anything
+	        	return d
+	        
+	        (fpath, fname) = self.__calcfilename(d)
+	        comppath = "%s/%s" % (self.rootdir, fpath)
+	        compname = "%s/%s" % (comppath, fname)
+	        print "compname: " + compname
+	        if not os.access(comppath, os.X_OK):
+	            os.makedirs(comppath)
+	        if os.access(compname, os.F_OK|os.R_OK|os.W_OK):
+	            # file already exists, we don't need to do anything
+	            print "ChunkStore.put: file already exists"
+	            return d
+	        with open(compname, "w") as f:
+	            chunk.tofile(f)
+	            self.curspace += len(chunk)
+	        self._storedHashes.append(d)
+	        return d
+        except:
+        	traceback.print_exc()
+	    	return ""
 
 
     def get(self, hashstring):
@@ -82,20 +87,25 @@ class ChunkStoreServer:
         if hashstring=="0":
             return array('c')
 
-        (fpath, fname) = self.__calcfilename(hashstring)
-        compname = "%s/%s/%s" % (self.rootdir, fpath, fname)
-        assert(os.access(compname, os.F_OK|os.R_OK), "failed to access file %s" % compname)
-        s = os.stat(compname).st_size
-        with open(compname, "r") as f:
-            chunk = array('c')
-            chunk.fromfile(f, s)
-        hash = self.hashalgo.copy()
-        hash.update(chunk)
-        d = hash.hexdigest()
-        assert(d==hashstring, "file %s does not have correct checksum %s" % (compname, hashstring))
-
-        print "returning chunk for hash %s" % hashstring
-        return chunk
+        try:
+	        (fpath, fname) = self.__calcfilename(hashstring)
+	        compname = "%s/%s/%s" % (self.rootdir, fpath, fname)
+	        assert(os.access(compname, os.F_OK|os.R_OK), "failed to access file %s" % compname)
+	        s = os.stat(compname).st_size
+	        with open(compname, "r") as f:
+	            chunk = array('c')
+	            chunk.fromfile(f, s)
+	        hash = self.hashalgo.copy()
+	        hash.update(chunk)
+	        d = hash.hexdigest()
+	        assert(d==hashstring, "file %s does not have correct checksum %s" % (compname, hashstring))
+	
+	        print "returning chunk for hash %s" % hashstring
+	        return chunk
+        except:
+        	traceback.print_exc()
+	    	return array('c')
+	   
     
 
     def saveinithash(self, hash):
@@ -105,16 +115,23 @@ class ChunkStoreServer:
 
 
     def loadinithash(self):
-        with open("%s/inithash" % self.rootdir, "r") as f:
-            return f.readline()
+    	try:
+            with open("%s/inithash" % self.rootdir, "r") as f:
+                return f.readline()
+        except:
+	    	print "ChunkStoreServer: failed to load inithash"
+	    	return ""
 
 
     def remove(self, hashstring):
-        (fpath, fname) = self.__calcfilename(hashstring)
-        compname = "%s/%s/%s" % (self.rootdir, fpath, fname)
-        self.curspace -= os.stat(compname).st_size
-        os.remove(compname)
-        self._storedHashes.remove(hashstring)
+    	try:
+	        (fpath, fname) = self.__calcfilename(hashstring)
+	        compname = "%s/%s/%s" % (self.rootdir, fpath, fname)
+	        self.curspace -= os.stat(compname).st_size
+	        os.remove(compname)
+	        self._storedHashes.remove(hashstring)
+        except:
+	    	traceback.print_exc()
 
     
     def get_stored_hashes(self):

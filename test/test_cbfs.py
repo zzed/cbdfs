@@ -178,6 +178,8 @@ cs.remove(h)
 hashes = cs._client.get_stored_hashes()
 assert(not h in hashes)
 
+for i in range(0, 100):
+	cs._client.remove("fff")
 
 # TODO: test garbage collection!
 

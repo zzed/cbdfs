@@ -245,7 +245,8 @@ class ChunkStoreManager:
             if cs.available:
                 try:
                     hash = cs.loadInitHash()
-                    return hash
+                    if hash != "":
+                        return hash
                 except:
                     traceback.print_exc()
                     print "ChunkStoreManager.loadinithash: failed to load inithash from store %s" % cs.host
@@ -274,6 +275,7 @@ class ChunkStoreManager:
         for cs in self.chunkstores:
             if cs.available:
                 count = 0
+                print "ChunkStoreManager._doChunkStoreGC: processing host %s" % cs.host
                 for h in cs.stored_hashes:
                     if not h in usedhashes:
                         cs.remove(h)
